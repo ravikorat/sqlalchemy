@@ -1,6 +1,13 @@
 from .database import Base
-from sqlalchemy import Column ,Integer,String , ForeignKey
+from sqlalchemy import Column ,Integer,String , ForeignKey,Enum
+import enum
+from sqlalchemy_utils import URLType
 from sqlalchemy.orm import relationship
+from enum import Enum
+
+class Role(str,Enum):
+    Admin = 'Admin'
+    User = 'User'
 
 class Blog(Base):
     __tablename__ = 'blogs'
@@ -19,5 +26,7 @@ class User(Base):
     name = Column(String)
     email = Column(String)
     password = Column(String)
+    url = Column(URLType)
+    role = Column(String,default=Role.Admin)
 
     blogs = relationship('Blog',back_populates="author")

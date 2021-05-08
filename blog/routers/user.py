@@ -1,8 +1,12 @@
-from fastapi import APIRouter,Depends,status,HTTPException
+from fastapi import APIRouter,Depends,status,HTTPException,File ,UploadFile
+from fastapi.security import OAuth2PasswordRequestForm
 from typing import List
 from sqlalchemy.orm import Session
-from .. import models,schemas,database,hashing
+from .. import models,schemas,database,hashing,oauth2
 # from blog.hashing import Hash
+import shutil
+from ..repository import user
+from enum import Enum
 
 
 get_db =database.get_db
@@ -14,32 +18,32 @@ router = APIRouter(
 
 
 @router.get('/',response_model=List[schemas.showUser])
-def all(db:Session=Depends(get_db)):
-    users = db.query(models.User).all()
-    return users
-
-
-
+def all(db:Session=Depends(get_db),get_current_user:schemas.User = Depends(oauth2.get_current_user)):
+    if get_current_user.role == "User":
+        users = db.query(models.User).filter(models.User.role == "User").all()
+        return users
+    else:
+        return user.show_all(db)
+    
 @router.post('/')
-def create(request:schemas.User, db:Session = Depends(get_db)):
-    new_user = models.User(name = request.name,email = request.email,password =hashing.Hash.bcrypt(request.password) )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return new_user
+def create(name:str,email:str,password:str,role:str,file:UploadFile = File(...), db:Session = Depends(get_db),get_current_user:schemas.User = Depends(oauth2.get_current_user)):
+    if get_current_user.role == "User":
+        return "You can't access this site"
+    else:
+        with open("media/"+file.filename,"wb") as image:
+            shutil.copyfileobj(file.file,image)
+ 
+        url = str("media/"+file.filename)
+        return user.create(db=db,name=name,email=email,password=password,role=role,url=url)
 
 @router.delete('/{id}')
-def delete(id : int,db:Session=Depends(get_db)):
-    user = db.query(models.User).filter(models.User.id == id)
-    if not user.first():
-        raise HTTPException (status_code=status.HTTP_404_NOT_FOUND,detail=f"User with id {id} is not found ")
-    user.delete(synchronize_session=False)
-    db.commit()
-    return 'Done'
+def delete(id : int,db:Session=Depends(get_db),get_current_user:schemas.User = Depends(oauth2.get_current_user)):
+    return user.delete(id,db,get_current_user)
 
 @router.put('/{id}',response_model=schemas.User)
-def update(id:int,request:schemas.User,db:Session = Depends(get_db)):
-    user=db.query(models.User).filter(models.User.id == id).first()
-    user.update(request)
-    db.commit()
-    return 'Done'
+def update(id:int,request:schemas.User,db:Session = Depends(get_db),get_current_user:schemas.User = Depends(oauth2.get_current_user)):
+    return user.update(id,db,get_current_user)
+
+@router.get('/{id}',response_model = schemas.showUser)
+def show(id:int,db:Session=Depends(get_db),get_current_user:schemas.User = Depends(oauth2.get_current_user)):
+    return user.show(id,db,get_current_user)
